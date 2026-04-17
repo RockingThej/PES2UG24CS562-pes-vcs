@@ -97,7 +97,6 @@ int object_write(ObjectType type, const void *data, size_t len, ObjectID *id_out
     const char *type_str = (type == OBJ_BLOB) ? "blob" :
                            (type == OBJ_TREE) ? "tree" : "commit";
 
-    // Step 1: Build header "blob 16\0"
     char header[64];
     int header_len = snprintf(header, sizeof(header), "%s %zu", type_str, len);
     size_t full_len = header_len + 1 + len;
@@ -106,12 +105,23 @@ int object_write(ObjectType type, const void *data, size_t len, ObjectID *id_out
     memcpy(full, header, header_len + 1);
     memcpy(full + header_len + 1, data, len);
 
-    // Step 2: Compute SHA-256 hash
     compute_hash(full, full_len, id_out);
 
+    // Step 3: Deduplication - skip if already stored
+    if (object_exists(id_out)) { free(full); return 0; }
+
+    // Step 4: Create shard directory .pes/objects/XX/
+    char path[512];
+    object_path(id_out, path, sizeof(path));
+    char dir[512];
+    snprintf(dir, sizeof(dir), "%s", path);
+    char *slash = strrchr(dir, '/');
+    if (slash) *slash = '\0';
+    mkdir(dir, 0755);
+
     free(full);
-    return -1; // not done yet
-}
+    return -1; // write not yet implemented
+}git add object.c && git commit -m "Phase 1: Add deduplication check and shard directory creation"
 
 // Read an object from the store.
 //
