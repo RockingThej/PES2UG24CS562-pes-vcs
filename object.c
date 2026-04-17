@@ -107,10 +107,8 @@ int object_write(ObjectType type, const void *data, size_t len, ObjectID *id_out
 
     compute_hash(full, full_len, id_out);
 
-    // Step 3: Deduplication - skip if already stored
     if (object_exists(id_out)) { free(full); return 0; }
 
-    // Step 4: Create shard directory .pes/objects/XX/
     char path[512];
     object_path(id_out, path, sizeof(path));
     char dir[512];
@@ -119,9 +117,24 @@ int object_write(ObjectType type, const void *data, size_t len, ObjectID *id_out
     if (slash) *slash = '\0';
     mkdir(dir, 0755);
 
+    // Steps 5-7: Write to temp file, fsync, atomic rename
+    char tmp_path[520];
+    snprintf(tmp_path, sizeof(tmp_path), "%s.tmp", path);
+    int fd = open(tmp_path, O_CREAT | O_WRONLY | O_TRUNC, 0644);
+    if (fd < 0) { free(full); return -1; }
+    write(fd, full, full_len);
+    fsync(fd);
+    close(fd);
     free(full);
-    return -1; // write not yet implemented
-}git add object.c && git commit -m "Phase 1: Add deduplication check and shard directory creation"
+
+    if (rename(tmp_path, path) != 0) return -1;
+
+    // Step 8: fsync the directory to persist the rename
+    int dfd = open(dir, O_RDONLY);
+    if (dfd >= 0) { fsync(dfd); close(dfd); }
+
+    return 0;
+}
 
 // Read an object from the store.
 //
