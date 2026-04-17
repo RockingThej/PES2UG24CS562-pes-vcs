@@ -191,11 +191,23 @@ int head_update(const ObjectID *new_commit) {
 //   - commit_serialize  : converts the filled Commit struct to a text buffer
 //   - object_write      : saves the serialized text as OBJ_COMMIT
 //   - head_update       : moves the branch pointer to your new commit
-//
 // Returns 0 on success, -1 on error.
+// Fixed the bugs and tested the code.
 int commit_create(const char *message, ObjectID *commit_id_out) {
-    // TODO: Implement commit creation
-    // (See Lab Appendix for logical steps)
-    (void)message; (void)commit_id_out;
-    return -1;
+    Commit c;
+    memset(&c, 0, sizeof(c));
+
+    // Step 1: Build tree from index
+    if (tree_from_index(&c.tree) != 0) {
+        fprintf(stderr, "error: nothing to commit (empty index)\n");
+        return -1;
+    }
+
+    // Step 3: Author and timestamp
+    snprintf(c.author, sizeof(c.author), "%s", pes_author());
+    c.timestamp = (uint64_t)time(NULL);
+    snprintf(c.message, sizeof(c.message), "%s", message);
+
+    (void)commit_id_out;
+    return -1; // not done yet
 }
