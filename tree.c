@@ -15,7 +15,10 @@
 #include <string.h>
 #include <dirent.h>
 #include <sys/stat.h>
-#include <index.h>
+#include "index.h"
+
+int object_write(ObjectType type, const void *data, size_t len, ObjectID *id_out);
+#define MODE_DIR 0040000
 
 // ─── Mode Constants ─────────────────────────────────────────────────────────
 
@@ -130,6 +133,7 @@ int tree_serialize(const Tree *tree, void **data_out, size_t *len_out) {
 //   - object_write    : save that binary buffer to the store as OBJ_TREE
 //
 // Returns 0 on success, -1 on error.
+// Helper: recursively write a subtree for entries sharing a common prefix
 static int write_tree_level(IndexEntry *entries, int count, const char *prefix, ObjectID *id_out) {
     Tree tree;
     tree.count = 0;
@@ -137,17 +141,20 @@ static int write_tree_level(IndexEntry *entries, int count, const char *prefix, 
     int i = 0;
     while (i < count) {
         const char *path = entries[i].path;
-        if (prefix && strlen(prefix) > 0)
-            path += strlen(prefix) + 1;
+        // Strip prefix if any
+        if (prefix && strlen(prefix) > 0) {
+            path += strlen(prefix) + 1; // skip "dir/"
+        }
 
         char *slash = strchr(path, '/');
         if (slash) {
-            // Group all entries sharing this subdirectory
+            // This entry belongs to a subdirectory
             char subdir[256];
             int dir_len = slash - path;
             strncpy(subdir, path, dir_len);
             subdir[dir_len] = '\0';
 
+            // Count all entries in this subdir
             int j = i;
             while (j < count) {
                 const char *p2 = entries[j].path;
@@ -156,6 +163,7 @@ static int write_tree_level(IndexEntry *entries, int count, const char *prefix, 
                 j++;
             }
 
+            // Build full prefix for subdirectory
             char new_prefix[512];
             if (prefix && strlen(prefix) > 0)
                 snprintf(new_prefix, sizeof(new_prefix), "%s/%s", prefix, subdir);
@@ -170,8 +178,10 @@ static int write_tree_level(IndexEntry *entries, int count, const char *prefix, 
             te->mode = MODE_DIR;
             strncpy(te->name, subdir, sizeof(te->name) - 1);
             te->hash = sub_id;
+
             i = j;
         } else {
+            // Plain file entry
             TreeEntry *te = &tree.entries[tree.count++];
             te->mode = entries[i].mode;
             strncpy(te->name, path, sizeof(te->name) - 1);
@@ -187,19 +197,10 @@ static int write_tree_level(IndexEntry *entries, int count, const char *prefix, 
     free(tree_data);
     return rc;
 }
+
 int tree_from_index(ObjectID *id_out) {
     Index index;
-
-    // Load index
-    if (index_load(&index) != 0) {
-        return -1;
-    }
-
-    // If no files staged
-    if (index.count == 0) {
-        return -1;
-    }
-
-    // Build tree recursively from root
+    if (index_load(&index) != 0) return -1;
+    if (index.count == 0) return -1;
     return write_tree_level(index.entries, index.count, "", id_out);
 }
