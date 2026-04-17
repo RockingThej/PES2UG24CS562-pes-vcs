@@ -134,17 +134,49 @@ static int write_tree_level(IndexEntry *entries, int count, const char *prefix, 
     Tree tree;
     tree.count = 0;
 
-    for (int i = 0; i < count; i++) {
+    int i = 0;
+    while (i < count) {
         const char *path = entries[i].path;
         if (prefix && strlen(prefix) > 0)
             path += strlen(prefix) + 1;
 
-        // Only handle flat files for now (no slash)
-        if (!strchr(path, '/')) {
+        char *slash = strchr(path, '/');
+        if (slash) {
+            // Group all entries sharing this subdirectory
+            char subdir[256];
+            int dir_len = slash - path;
+            strncpy(subdir, path, dir_len);
+            subdir[dir_len] = '\0';
+
+            int j = i;
+            while (j < count) {
+                const char *p2 = entries[j].path;
+                if (prefix && strlen(prefix) > 0) p2 += strlen(prefix) + 1;
+                if (strncmp(p2, subdir, dir_len) != 0 || p2[dir_len] != '/') break;
+                j++;
+            }
+
+            char new_prefix[512];
+            if (prefix && strlen(prefix) > 0)
+                snprintf(new_prefix, sizeof(new_prefix), "%s/%s", prefix, subdir);
+            else
+                snprintf(new_prefix, sizeof(new_prefix), "%s", subdir);
+
+            ObjectID sub_id;
+            if (write_tree_level(entries + i, j - i, new_prefix, &sub_id) != 0)
+                return -1;
+
+            TreeEntry *te = &tree.entries[tree.count++];
+            te->mode = MODE_DIR;
+            strncpy(te->name, subdir, sizeof(te->name) - 1);
+            te->hash = sub_id;
+            i = j;
+        } else {
             TreeEntry *te = &tree.entries[tree.count++];
             te->mode = entries[i].mode;
             strncpy(te->name, path, sizeof(te->name) - 1);
             te->hash = entries[i].hash;
+            i++;
         }
     }
 
