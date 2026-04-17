@@ -202,7 +202,6 @@ int commit_create(const char *message, ObjectID *commit_id_out) {
         return -1;
     }
 
-    // Step 2: Read parent from HEAD (absent on first commit)
     ObjectID parent_id;
     if (head_read(&parent_id) == 0) {
         c.has_parent = 1;
@@ -215,6 +214,17 @@ int commit_create(const char *message, ObjectID *commit_id_out) {
     c.timestamp = (uint64_t)time(NULL);
     snprintf(c.message, sizeof(c.message), "%s", message);
 
-    (void)commit_id_out;
-    return -1; // serialize/write not yet done
+    void *data;
+    size_t data_len;
+    if (commit_serialize(&c, &data, &data_len) != 0) return -1;
+
+    ObjectID commit_id;
+    int rc = object_write(OBJ_COMMIT, data, data_len, &commit_id);
+    free(data);
+    if (rc != 0) return -1;
+
+    if (head_update(&commit_id) != 0) return -1;
+
+    if (commit_id_out) *commit_id_out = commit_id;
+    return 0;
 }
