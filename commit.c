@@ -197,17 +197,24 @@ int commit_create(const char *message, ObjectID *commit_id_out) {
     Commit c;
     memset(&c, 0, sizeof(c));
 
-    // Step 1: Build tree from index
     if (tree_from_index(&c.tree) != 0) {
         fprintf(stderr, "error: nothing to commit (empty index)\n");
         return -1;
     }
 
-    // Step 3: Author and timestamp
+    // Step 2: Read parent from HEAD (absent on first commit)
+    ObjectID parent_id;
+    if (head_read(&parent_id) == 0) {
+        c.has_parent = 1;
+        c.parent = parent_id;
+    } else {
+        c.has_parent = 0;
+    }
+
     snprintf(c.author, sizeof(c.author), "%s", pes_author());
     c.timestamp = (uint64_t)time(NULL);
     snprintf(c.message, sizeof(c.message), "%s", message);
 
     (void)commit_id_out;
-    return -1; // not done yet
+    return -1; // serialize/write not yet done
 }
