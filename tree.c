@@ -131,11 +131,27 @@ int tree_serialize(const Tree *tree, void **data_out, size_t *len_out) {
 //
 // Returns 0 on success, -1 on error.
 static int write_tree_level(IndexEntry *entries, int count, const char *prefix, ObjectID *id_out) {
-    (void)entries; (void)count; (void)prefix; (void)id_out;
-    return -1; // TODO
-}
+    Tree tree;
+    tree.count = 0;
 
-int tree_from_index(ObjectID *id_out) {
-    (void)id_out;
-    return -1;
+    for (int i = 0; i < count; i++) {
+        const char *path = entries[i].path;
+        if (prefix && strlen(prefix) > 0)
+            path += strlen(prefix) + 1;
+
+        // Only handle flat files for now (no slash)
+        if (!strchr(path, '/')) {
+            TreeEntry *te = &tree.entries[tree.count++];
+            te->mode = entries[i].mode;
+            strncpy(te->name, path, sizeof(te->name) - 1);
+            te->hash = entries[i].hash;
+        }
+    }
+
+    void *tree_data;
+    size_t tree_len;
+    if (tree_serialize(&tree, &tree_data, &tree_len) != 0) return -1;
+    int rc = object_write(OBJ_TREE, tree_data, tree_len, id_out);
+    free(tree_data);
+    return rc;
 }
