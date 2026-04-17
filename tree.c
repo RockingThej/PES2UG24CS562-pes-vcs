@@ -187,3 +187,19 @@ static int write_tree_level(IndexEntry *entries, int count, const char *prefix, 
     free(tree_data);
     return rc;
 }
+int tree_from_index(ObjectID *id_out) {
+    Index index;
+
+    // Load index
+    if (index_load(&index) != 0) {
+        return -1;
+    }
+
+    // If no files staged
+    if (index.count == 0) {
+        return -1;
+    }
+
+    // Build tree recursively from root
+    return write_tree_level(index.entries, index.count, "", id_out);
+}
